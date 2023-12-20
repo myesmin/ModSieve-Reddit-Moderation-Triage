@@ -1,0 +1,47 @@
+# Query: 
+# ContextLines: 1
+
+import streamlit as st
+from tensorflow import keras, image
+from tensorflow import expand_dims
+import numpy as np
+
+@st.cache(allow_output_mutation=True)
+def load_local_model(model_path):
+    model = keras.models.load_model(model_path)
+    return model
+
+# Path to your local model
+local_model_path = "/Users/moohona/GA/Project/Capstone-Neuroimaging-MRI/my_modelCHH.hdf5"
+
+# Load the local model
+local_model = load_local_model(local_model_path)
+
+# set image size
+image_size = 240
+st.title('Do you have Alzheimer\'s disease or Brain tumor?')
+st.subheader('Please upload a brain MRI image to determine whether it indicates the presence of Alzheimer\'s disease and its severity, a brain tumor and its type, or if there is no evidence of disease.')
+your_image = st.file_uploader(label='Upload your image here', type=["png", "jpg", "jpeg"])
+
+# Prepare image for TensorFlow models
+if your_image is not None:
+    test_img = keras.utils.load_img(your_image, target_size=(image_size, image_size), color_mode='grayscale')  # Read grayscale image and set size
+    test_img = expand_dims(test_img, -1)  # Change from (image_size, image_size) to (image_size, image_size, 1)
+    test_img = image.grayscale_to_rgb(test_img)  # Change from (image_size, image_size, 1) to (image_size, image_size, 3)
+    test_img = keras.preprocessing.image.img_to_array(test_img)
+    test_img = expand_dims(test_img, 0)  # Change to (1, image_size, image_size, 3) for TensorFlow model 
+
+if st.button('Submit'):
+    st.image(your_image, width=300)
+    # Predict using the local model
+    prediction = local_model.predict(test_img, verbose=False)
+    
+    # Interpret the prediction based on your specific model logic
+    # Example: Assuming binary classification
+    pred_class = (prediction > 0.5).astype("int32")[0][0]
+    if pred_class == 0:
+        st.write('The MRI image indicates the absence of a disease')
+    else:
+        st.write('The MRI image indicates the presence of a disease')
+
+    # You can extend the logic for more detailed predictions based on your specific model outputs
