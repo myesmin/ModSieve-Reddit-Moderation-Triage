@@ -12,3 +12,7 @@ venv/
 
 # OS
 .DS_Store
+
+# Collected and derived data -- regenerate with scripts/collect.py and scripts/prepare.py
+Data/raw/
+Data/processed/
