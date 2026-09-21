@@ -1,22 +1,55 @@
-# Secrets: .env and every editor backup of it (.env.save, .env.bak, .env~)
+# --- Secrets ------------------------------------------------------------------
+# .env and every editor backup of it (.env.save, .env.bak, .env~). A nano
+# backup named .env.save was committed once; these patterns exist because of it.
 .env*
 !.env.example
 *.save
+*.bak
+*~
 
-# Python
+# --- Collected and derived data -----------------------------------------------
+# Regenerate with scripts/collect.py and scripts/prepare.py. The original
+# 2,000-post CSVs in Data/ stay tracked: the evaluation and tests depend on them.
+Data/raw/
+Data/processed/
+Data/probe/
+
+# --- Model artifacts and experiment tracking ----------------------------------
+# Trained models are rebuilt from code + a data hash, never committed as binaries.
+models/
+*.pkl
+*.joblib
+mlruns/
+
+# --- Python -------------------------------------------------------------------
 __pycache__/
 *.py[cod]
-.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
 .venv/
 venv/
 
-# OS
+# --- Test and tool caches -----------------------------------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Notebooks ----------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Editors ------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+
+# --- OS -----------------------------------------------------------------------
 .DS_Store
+._*
+Thumbs.db
 
-# Collected and derived data -- regenerate with scripts/collect.py and scripts/prepare.py
-Data/raw/
-Data/processed/
-
-# Run logs
+# --- Run output ---------------------------------------------------------------
 *.log
-Data/probe/
+nohup.out
