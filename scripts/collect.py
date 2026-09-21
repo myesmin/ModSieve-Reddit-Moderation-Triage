@@ -25,19 +25,25 @@ from src.collect import (DEFAULT_SUBREDDITS, Checkpoint, CollectionConfig,
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--subreddits", nargs="+", default=list(DEFAULT_SUBREDDITS))
-    parser.add_argument("--posts", type=int, default=2_000,
-                        help="posts per subreddit")
-    parser.add_argument("--comments", type=int, default=20,
-                        help="top comments per post; 0 to skip comment fetching")
+    parser.add_argument("--listing", choices=["new", "top"], default="new",
+                        help="new: the posts a moderation queue sees (default); "
+                             "top: all-time highlights, mostly image posts")
+    parser.add_argument("--posts", type=int, default=1_000,
+                        help="posts per subreddit (Reddit listings stop near 1,000)")
+    parser.add_argument("--comments", type=int, default=0,
+                        help="comments per post; off by default because they do "
+                             "not exist when a post is submitted")
     parser.add_argument("--rpm", type=int, default=60,
                         help="requests per minute (be kind to the API)")
-    parser.add_argument("--output", type=Path, default=Path("Data/raw"))
+    parser.add_argument("--output", type=Path, default=None,
+                        help="defaults to Data/raw/<listing>, so samples never mix")
     return parser.parse_args()
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     args = parse_args()
+    args.output = args.output or ROOT / "Data" / "raw" / args.listing
 
     load_dotenv(ROOT / ".env")
     problems = credential_problems(os.environ)
@@ -48,6 +54,7 @@ def main() -> None:
 
     config = CollectionConfig(
         subreddits=tuple(args.subreddits),
+        listing=args.listing,
         posts_per_subreddit=args.posts,
         comments_per_post=args.comments,
         requests_per_minute=args.rpm,
@@ -59,7 +66,7 @@ def main() -> None:
         logging.info("resuming: %d posts already collected", len(checkpoint.seen))
 
     try:
-        written = collect(PrawSource(), config,
+        written = collect(PrawSource(listing=config.listing), config,
                           limiter=RateLimiter(config.requests_per_minute),
                           checkpoint=checkpoint)
     except Exception as exc:

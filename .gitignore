@@ -1,7 +1,7 @@
-# Secrets
-.env
-*.env
+# Secrets: .env and every editor backup of it (.env.save, .env.bak, .env~)
+.env*
 !.env.example
+*.save
 
 # Python
 __pycache__/
@@ -16,3 +16,7 @@ venv/
 # Collected and derived data -- regenerate with scripts/collect.py and scripts/prepare.py
 Data/raw/
 Data/processed/
+
+# Run logs
+*.log
+Data/probe/

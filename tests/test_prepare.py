@@ -125,14 +125,14 @@ def test_no_post_lands_in_both_train_and_test(raw):
 
 
 def test_prepared_text_contains_no_label_leakage(raw):
-    prepared = prepare(raw)
+    prepared = prepare(raw, PrepConfig(include_comments=True))
     text = " ".join(pd.concat([prepared.train, prepared.test])["text"]).lower()
     assert "r/marvel" not in text and "r/harrypotter" not in text
     assert "rules" not in text                    # the AutoModerator comment
 
 
 def test_report_accounts_for_every_removal(raw):
-    report = prepare(raw).report
+    report = prepare(raw, PrepConfig(include_comments=True)).report
     assert report["cleaning"]["comments"]["bot"] == 20
     assert report["cleaning"]["leakage"]["subreddit_mentions"] == 20
     assert report["output_posts"] == 20
@@ -169,3 +169,12 @@ def test_short_posts_leave_train_but_stay_in_test():
     assert "Neat" in test_text and "Mood" in test_text
     assert prepared.report["too_short_removed_from_train"] == 2
     assert prepared.report["short_posts_kept_in_test"] == 2
+
+
+def test_output_carries_only_contract_columns(raw):
+    raw = raw.assign(score=100, num_comments=50, upvote_ratio=0.9, domain="i.redd.it")
+    prepared = prepare(raw)
+    columns = set(prepared.train.columns)
+    assert {"score", "num_comments", "upvote_ratio", "comments_json"}.isdisjoint(columns)
+    assert {"id", "subreddit", "text", "domain"} <= columns
+    assert "score" in prepared.report["data_contract"]["dropped_columns"]

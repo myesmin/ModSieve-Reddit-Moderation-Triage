@@ -1,11 +1,13 @@
 """collect -> Parquet -> prepare, end to end, with realistic comment noise."""
+import pandas as pd
+
 from src.collect import (CollectionConfig, RateLimiter, RawComment, RawPost,
                          collect, load_collected)
 from src.prepare import PrepConfig, prepare
 
 
 class Source:
-    def iter_posts(self, subreddit, limit, comments_per_post):
+    def iter_posts(self, subreddit, limit, comments_per_post, skip=None):
         for i in range(limit):
             yield RawPost(
                 id=f"{subreddit}{i}", subreddit=subreddit,
@@ -31,7 +33,8 @@ def test_collected_data_prepares_without_leakage(tmp_path):
     collect(Source(), config,
             limiter=RateLimiter(60, clock=lambda: 0.0, sleeper=lambda s: None))
 
-    prepared = prepare(load_collected(tmp_path / "raw"), PrepConfig())
+    prepared = prepare(load_collected(tmp_path / "raw"),
+                       PrepConfig(include_comments=True))
     report = prepared.report
     text = " ".join(prepared.train["text"].tolist() + prepared.test["text"].tolist())
 
@@ -42,3 +45,22 @@ def test_collected_data_prepares_without_leakage(tmp_path):
     assert "r/marvel" not in text and "r/harrypotter" not in text
     assert "this sub" not in text
     assert "genuinely great point" in text                     # real signal survives
+
+
+def test_default_preparation_excludes_comments_and_engagement(tmp_path):
+    """The data contract: only what exists when a post is submitted."""
+    config = CollectionConfig(
+        subreddits=("marvel", "harrypotter"), posts_per_subreddit=20,
+        comments_per_post=10, output_dir=tmp_path / "raw",
+        checkpoint_path=tmp_path / "raw/.cp.json")
+    collect(Source(), config,
+            limiter=RateLimiter(60, clock=lambda: 0.0, sleeper=lambda s: None))
+
+    prepared = prepare(load_collected(tmp_path / "raw"))
+    everything = pd.concat([prepared.train, prepared.test])
+    text = " ".join(everything["text"])
+
+    assert "genuinely great point" not in text      # comments stay out
+    for column in ("score", "num_comments", "upvote_ratio", "comments_json"):
+        assert column not in everything.columns
+    assert prepared.report["cleaning"]["comments"] == "excluded by data contract"

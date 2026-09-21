@@ -14,6 +14,11 @@ stage guards against, in order of how badly they would mislead us:
 3. **Temporal leakage.** A random split trains on posts written after the ones
    it is tested on. Deployment only ever sees the future, so the test set is
    the most recent slice of each community.
+
+It also enforces a **data contract**: the output carries only what exists at
+the moment a post is submitted, because that is the moment the triage system
+has to decide. Score, comment count and upvote ratio are measured afterwards,
+and comments have not been written yet. Those never become features.
 """
 from __future__ import annotations
 
@@ -40,6 +45,15 @@ SELF_REFERENCE = re.compile(r"\bthis\s+(?:sub|subreddit)\b", re.I)
 URL = re.compile(r"https?://\S+")
 WHITESPACE = re.compile(r"\s+")
 
+# The data contract. Identifiers and the label, then everything a moderator can
+# see at submission time. Anything else is dropped from the output.
+KEY_COLUMNS = ("id", "subreddit", "created_utc", "snapshot_utc")
+SUBMISSION_TIME_FEATURES = ("title", "body", "flair", "is_self", "domain",
+                            "over_18", "spoiler")
+# Measured after submission: kept in raw data for analysis, never in features.
+POST_HOC_COLUMNS = ("score", "num_comments", "upvote_ratio", "comments_json",
+                    "n_comments_collected", "permalink")
+
 
 @dataclass
 class PrepConfig:
@@ -47,6 +61,9 @@ class PrepConfig:
     test_fraction: float = 0.2
     split: str = "temporal"          # "temporal" or "random"
     random_state: int = 42
+    # Analysis only. Comments are written after submission, so a model trained
+    # with them cannot run at the point the triage decision is made.
+    include_comments: bool = False
 
 
 @dataclass
@@ -100,15 +117,18 @@ def title_key(title: str) -> str:
 
 # --- the pipeline -------------------------------------------------------------
 
-def assemble(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """Clean comments, strip leakage and build the `text` column."""
+def assemble(raw: pd.DataFrame, include_comments: bool = False
+             ) -> tuple[pd.DataFrame, dict]:
+    """Strip leakage and build the `text` column (comments only if asked)."""
     comment_counts: Counter = Counter()
     leak_counts: Counter = Counter()
     texts, n_kept = [], []
 
     for row in raw.itertuples(index=False):
-        comments = json.loads(getattr(row, "comments_json", "[]") or "[]")
-        kept = clean_comments(comments, comment_counts)
+        kept = []
+        if include_comments:
+            comments = json.loads(getattr(row, "comments_json", "[]") or "[]")
+            kept = clean_comments(comments, comment_counts)
         parts = [row.title or "", row.body or "", *kept]
         text = strip_leakage(" ".join(p for p in parts if p), leak_counts)
         texts.append(normalise(text))
@@ -116,8 +136,24 @@ def assemble(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
     out = raw.copy()
     out["text"] = texts
-    out["n_comments_kept"] = n_kept
-    return out, {"comments": dict(comment_counts), "leakage": dict(leak_counts)}
+    if include_comments:
+        out["n_comments_kept"] = n_kept
+    comments_report = dict(comment_counts) if include_comments else "excluded by data contract"
+    return out, {"comments": comments_report, "leakage": dict(leak_counts)}
+
+
+def apply_contract(df: pd.DataFrame, include_comments: bool) -> tuple[pd.DataFrame, dict]:
+    """Keep identifiers, the label and submission-time features. Drop the rest."""
+    keep = [c for c in (*KEY_COLUMNS, *SUBMISSION_TIME_FEATURES) if c in df.columns]
+    keep.append("text")
+    if include_comments and "n_comments_kept" in df.columns:
+        keep.append("n_comments_kept")
+    dropped = sorted(set(df.columns) - set(keep))
+    return df[keep], {
+        "features": [c for c in SUBMISSION_TIME_FEATURES if c in df.columns] + ["text"],
+        "text_includes_comments": include_comments,
+        "dropped_columns": dropped,
+    }
 
 
 def deduplicate(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
@@ -172,7 +208,8 @@ def prepare(raw: pd.DataFrame, config: PrepConfig | None = None) -> PreparedData
     config = config or PrepConfig()
     report: dict = {"config": asdict(config), "input_posts": int(len(raw))}
 
-    df, report["cleaning"] = assemble(raw)
+    df, report["cleaning"] = assemble(raw, config.include_comments)
+    df, report["data_contract"] = apply_contract(df, config.include_comments)
     df, report["deduplication"] = deduplicate(df)
     train, test, report["split"] = split(df, config)
 

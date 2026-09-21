@@ -58,23 +58,44 @@ class RawPost:
     is_self: bool
     permalink: str
     comments: tuple[RawComment, ...] = ()
+    # When this record was taken. Everything above describes the post *as of*
+    # this moment -- engagement fields keep changing afterwards -- and the gap
+    # from created_utc says how long moderators had already had to act on it.
+    snapshot_utc: float = 0.0
+    domain: str = ""
+    over_18: bool = False
+    spoiler: bool = False
 
 
 class PostSource(Protocol):
-    """What the collector needs from a Reddit client."""
+    """What the collector needs from a Reddit client.
 
-    def iter_posts(self, subreddit: str, limit: int,
-                   comments_per_post: int) -> Iterator[RawPost]:
+    `skip(post_id)` is checked before a post's comments are fetched. Comments
+    cost one request per post; the listing that yields ids costs one request
+    per hundred. Skipping at the id stage is what makes resuming cheap.
+    """
+
+    def iter_posts(self, subreddit: str, limit: int, comments_per_post: int,
+                   skip: Callable[[str], bool] | None = None) -> Iterator[RawPost]:
         ...
+
+
+LISTINGS = ("new", "top")
 
 
 @dataclass
 class CollectionConfig:
     subreddits: tuple[str, ...] = DEFAULT_SUBREDDITS
-    posts_per_subreddit: int = 2_000
-    comments_per_post: int = 20
+    listing: str = "new"
+    # Reddit's listings stop at ~1,000 posts, so a larger target does nothing
+    # for `new`; repeat runs over days are how the corpus grows.
+    posts_per_subreddit: int = 1_000
+    # Off by default: at submission time a post has no comments, so a model
+    # that learns from them cannot run where the decision is made.
+    comments_per_post: int = 0
     requests_per_minute: int = 60
     batch_size: int = 250
+    log_every: int = 25
     output_dir: Path = Path("Data/raw")
     checkpoint_path: Path = Path("Data/raw/.checkpoint.json")
 
@@ -154,6 +175,23 @@ def write_batch(rows: list[dict], output_dir: Path, subreddit: str,
     return path
 
 
+def _log_progress(subreddit: str, count: int, target: int, started: float) -> None:
+    elapsed = time.monotonic() - started
+    per_minute = count / elapsed * 60 if elapsed > 0 else 0.0
+    remaining = max(target - count, 0)
+    eta = f"~{remaining / per_minute:.0f} min left" if per_minute else "eta unknown"
+    logger.info("r/%s: %d/%d new posts, %.0f/min, %s",
+                subreddit, count, target, per_minute, eta)
+
+
+def _next_part(output_dir: Path, subreddit: str) -> int:
+    """First unused part number, so a resumed run appends instead of overwriting."""
+    existing = list((Path(output_dir) / f"subreddit={subreddit}").glob("part-*.parquet"))
+    if not existing:
+        return 0
+    return max(int(p.stem.split("-")[1]) for p in existing) + 1
+
+
 def collect(source: PostSource, config: CollectionConfig,
             limiter: RateLimiter | None = None,
             checkpoint: Checkpoint | None = None) -> dict[str, int]:
@@ -164,26 +202,39 @@ def collect(source: PostSource, config: CollectionConfig,
 
     for subreddit in config.subreddits:
         batch: list[dict] = []
-        part = 0
+        part = _next_part(config.output_dir, subreddit)
         count = 0
+        started = time.monotonic()
+        logger.info("r/%s: starting, target %d posts (%d already collected overall)",
+                    subreddit, config.posts_per_subreddit, len(checkpoint.seen))
+
         posts = source.iter_posts(subreddit, config.posts_per_subreddit,
-                                  config.comments_per_post)
+                                  config.comments_per_post,
+                                  skip=checkpoint.__contains__)
         for post in posts:
-            limiter.acquire()
             if post.id in checkpoint:
-                continue                      # already have it; resume cheaply
+                continue            # safety net for sources that ignore `skip`
             batch.append(flatten(post))
             checkpoint.add(post.id)
             count += 1
+            if config.log_every and count % config.log_every == 0:
+                _log_progress(subreddit, count, config.posts_per_subreddit, started)
             if len(batch) >= config.batch_size:
                 write_batch(batch, config.output_dir, subreddit, part)
                 checkpoint.save()             # checkpoint only after a durable write
                 batch, part = [], part + 1
+            if config.comments_per_post:
+                # Only comment fetches cost a request per post. Listings cost one
+                # per hundred posts and PRAW paces those itself; waiting here
+                # without comments would turn an 8,000-post pass from minutes
+                # into over two hours of sleeping.
+                limiter.acquire()
         if batch:
             write_batch(batch, config.output_dir, subreddit, part)
             checkpoint.save()
         written[subreddit] = count
-        logger.info("collected %d new posts from r/%s", count, subreddit)
+        logger.info("r/%s: done, %d new posts in %.1f min", subreddit, count,
+                    (time.monotonic() - started) / 60)
 
     return written
 
@@ -218,7 +269,10 @@ def credential_problems(env) -> list[str]:
 class PrawSource:
     """Adapter over PRAW. Imported lazily so tests never need the dependency."""
 
-    def __init__(self, reddit=None) -> None:
+    def __init__(self, reddit=None, listing: str = "new") -> None:
+        if listing not in LISTINGS:
+            raise ValueError(f"listing must be one of {LISTINGS}, got {listing!r}")
+        self._listing = listing
         if reddit is None:
             import os
             import praw
@@ -230,19 +284,31 @@ class PrawSource:
             )
         self._reddit = reddit
 
-    def iter_posts(self, subreddit: str, limit: int,
-                   comments_per_post: int) -> Iterator[RawPost]:
+    def iter_posts(self, subreddit: str, limit: int, comments_per_post: int,
+                   skip: Callable[[str], bool] | None = None) -> Iterator[RawPost]:
         sub = self._reddit.subreddit(subreddit)
-        seen = 0
-        # `top` over widening windows reaches further back than any single call.
-        for time_filter in ("all", "year", "month", "week"):
-            if seen >= limit:
+        skip = skip or (lambda _id: False)
+        considered: set[str] = set()
+        # For `top`, widening windows reach further back than any single call,
+        # but they overlap: an all-time top post is usually a top post of the
+        # year too. Each id is counted once, and already-collected ids count
+        # toward the target without their comments being fetched again.
+        for submission in self._listing_iter(sub):
+            if len(considered) >= limit:
                 return
-            for submission in sub.top(limit=None, time_filter=time_filter):
-                if seen >= limit:
-                    return
-                yield self._to_post(submission, subreddit, comments_per_post)
-                seen += 1
+            if submission.id in considered:
+                continue
+            considered.add(submission.id)
+            if skip(submission.id):
+                continue
+            yield self._to_post(submission, subreddit, comments_per_post)
+
+    def _listing_iter(self, sub):
+        if self._listing == "new":
+            yield from sub.new(limit=None)
+            return
+        for time_filter in ("all", "year", "month", "week"):
+            yield from sub.top(limit=None, time_filter=time_filter)
 
     @staticmethod
     def _to_post(submission, subreddit: str, comments_per_post: int) -> RawPost:
@@ -275,4 +341,8 @@ class PrawSource:
             is_self=submission.is_self,
             permalink=getattr(submission, "permalink", ""),
             comments=tuple(comments),
+            snapshot_utc=time.time(),
+            domain=getattr(submission, "domain", "") or "",
+            over_18=bool(getattr(submission, "over_18", False)),
+            spoiler=bool(getattr(submission, "spoiler", False)),
         )

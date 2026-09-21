@@ -98,14 +98,32 @@ itself against that.
 
 ## Data pipeline
 
+**What gets collected is what a moderation queue actually sees:** newly submitted
+posts, recorded with a timestamp of when they were observed. The original corpus
+sampled all-time top posts, which are overwhelmingly images with one-line captions,
+and that sampling choice created most of the "information ceiling" measured above:
+
+| Sample | Posts with body text |
+|---|---|
+| All-time top (original corpus) | ~2% |
+| New posts, r/harrypotter | 98% |
+| New posts, r/StarWars | 79% |
+| New posts, r/marvel | 49% |
+
+**A data contract limits features to what exists at submission time**, because that
+is when the triage decision is made: title, body, flair, link domain, NSFW and
+spoiler flags. Score, comment count and upvote ratio are measured later, and comments
+have not been written yet, so none of them can become features. Training on comments
+would inflate offline scores with information the deployed system never has.
+
 Collection stays raw; every cleaning decision happens in `src/prepare.py`, and every
 removal is counted in a report. It guards against three ways a dataset misleads:
 
-- **Label leakage.** Comments carry a community's fingerprints — AutoModerator
-  stickies, moderator notices, "crossposting from r/marvel". Bot and moderator
-  comments are dropped and explicit community references stripped, so the model
-  learns content rather than signatures. Franchise words themselves are kept: *Marvel*
-  is content, *r/marvel* is the label.
+- **Label leakage.** Posts carry a community's fingerprints — "crossposting from
+  r/marvel", "this sub" — and comments (analysis mode only) add AutoModerator and
+  moderator stickies. Those are stripped so the model learns content rather than
+  signatures. Franchise words themselves are kept: *Marvel* is content, *r/marvel*
+  is the label.
 - **Contradictory duplicates.** A post crossposted to two communities carries two
   labels. Every copy is removed — keeping one would pick a winner at random.
 - **Temporal leakage.** The test set is the most recent 20% of each community, so the
@@ -133,7 +151,7 @@ scripts/
   collect.py       CLI for collection
   prepare.py       CLI for preparation
   make_figures.py
-tests/            49 tests: collector resume, leakage stripping, split integrity,
+tests/            63 tests: collector resume, leakage stripping, split integrity,
                   policy maths, and one collect -> prepare end-to-end run
 Code/             exploratory notebooks (collection, EDA, modeling)
 Data/             collected posts, 1,000 per community
@@ -149,16 +167,15 @@ pip install -r requirements.txt
 cp .env.example .env          # only needed to collect fresh data
 python -m src.evaluate        # writes reports/metrics.json
 python scripts/make_figures.py
-pytest                        # 49 tests
+pytest                        # 63 tests
 ```
 
 To build a larger corpus — collect (interrupt and re-run freely; completed posts
 are checkpointed and skipped), then prepare:
 
 ```bash
-python scripts/collect.py --subreddits marvel harrypotter lotr StarWars \
-                          --posts 2000 --comments 20 --rpm 60
-python scripts/prepare.py     # writes train/test Parquet + report.json
+python scripts/collect.py      # newest ~1,000 posts per community; re-run daily
+python scripts/prepare.py      # writes train/test Parquet + report.json
 ```
 
 Every number in this README comes from `reports/metrics.json`. None are typed by hand.
@@ -167,9 +184,12 @@ Every number in this README comes from `reports/metrics.json`. None are typed by
 
 The classifier works. The system around it is the actual project.
 
-- **Data enrichment (in progress).** Collection and preparation are built and
-  tested; the multi-community, comment-bearing corpus is next. Comments are the
-  measured lever on coverage, and the current corpus has none.
+- **Data collection (in progress).** A daily pass over the newest posts in eight
+  communities, under the submission-time data contract. Next is **real moderation
+  labels**: Reddit hides removed posts from listings, so a removal can only be
+  seen by recording a post while it is live and looking it up again later. That
+  turns the question from "which community is this?" into "will moderators remove
+  this?" — genuine ground truth, with the delayed labels production systems deal in.
 - **M1 — serving and policy.** A `/classify` endpoint returning label, confidence, the
   features that drove the call, and model version; thresholds in config, not code;
   tests and a container.
@@ -185,15 +205,16 @@ is an open question, not a promise.
 
 ## Limitations
 
-- **Title-only in practice.** 97.7% empty bodies; comments were never collected.
+- **The original corpus is title-only.** 97.7% of its bodies are empty, a product
+  of sampling all-time top posts; the new-post collection fixes this.
 - **Two classes, both easy.** Marvel vs Harry Potter is far more separable than the
   communities a real moderation queue spans.
 - **The label is a proxy.** Community of origin is not the same as topic, and it is
   free rather than annotated — convenient, but not ground truth for off-topic-ness.
 - **No human baseline yet.** Without knowing what a person scores on these titles,
   "82%" has no ceiling to be measured against.
-- **Top-ranked posts only**, collected October 2023, so the sample is not representative
-  of everyday traffic.
+- **The headline numbers still come from the October 2023 top-posts corpus.** They
+  will be re-measured on the new-post collection once enough has accumulated.
 
 ## Data and credentials
 
