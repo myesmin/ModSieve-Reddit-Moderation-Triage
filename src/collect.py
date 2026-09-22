@@ -280,7 +280,7 @@ class PrawSource:
                 client_id=os.environ["REDDIT_CLIENT_ID"],
                 client_secret=os.environ["REDDIT_CLIENT_SECRET"],
                 user_agent=os.environ.get(
-                    "REDDIT_USER_AGENT", "Reddit-NLP-HP-Marvel/1.0"),
+                    "REDDIT_USER_AGENT", "ModSieve/1.0"),
             )
         self._reddit = reddit
 

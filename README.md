@@ -1,7 +1,10 @@
-# Community Triage
+# ModSieve
 
-**A content-triage system for online communities: it resolves the posts it is sure
-about, and sends everything else to a human.**
+**First-pass moderation for online communities: it resolves the posts it is sure
+about, and holds back everything else for a human.**
+
+*Like a sieve: the easy calls pass straight through; the ones that need a person
+are caught.*
 
 Built on Reddit data, with the focus on what surrounds the model: a decision policy
 with a precision guarantee, a data pipeline that only uses what exists at the moment
