@@ -56,3 +56,9 @@ Thumbs.db
 *.log
 nohup.out
 logs/
+
+# --- Personal, never published --------------------------------------------------
+INTERVIEW_PREP.md
+private/
+.claude/
+CLAUDE.md
