@@ -1,0 +1,97 @@
+{
+  "annotators": {
+    "mohona": {
+      "n_posts": 200,
+      "unsure_rate": 0.275,
+      "median_seconds_per_post": 2.8499999999999996,
+      "human_forced_choice": {
+        "accuracy": 0.8025,
+        "ci95": [
+          0.76,
+          0.845
+        ],
+        "n": 200
+      },
+      "model_same_posts": {
+        "accuracy": 0.82,
+        "ci95": [
+          0.769875,
+          0.875
+        ],
+        "n": 200
+      },
+      "human_when_answering": {
+        "accuracy": 0.9172413793103448,
+        "ci95": [
+          0.8689655172413793,
+          0.958793103448275
+        ],
+        "n": 145
+      },
+      "model_at_same_coverage": {
+        "accuracy": 0.903448275862069,
+        "ci95": [
+          0.8551724137931035,
+          0.9448275862068966
+        ],
+        "n": 145
+      },
+      "model_on_posts_human_answered": {
+        "accuracy": 0.8620689655172413,
+        "ci95": [
+          0.8,
+          0.9172413793103448
+        ],
+        "n": 145
+      },
+      "model_on_posts_human_was_unsure": {
+        "accuracy": 0.7090909090909091,
+        "ci95": [
+          0.5818181818181818,
+          0.8363636363636363
+        ],
+        "n": 55
+      },
+      "by_franchise_word": {
+        "with": {
+          "human_forced_choice": {
+            "accuracy": 0.9513888888888888,
+            "ci95": [
+              0.8958333333333334,
+              0.9930555555555556
+            ],
+            "n": 72
+          },
+          "model": {
+            "accuracy": 0.9583333333333334,
+            "ci95": [
+              0.9027777777777778,
+              1.0
+            ],
+            "n": 72
+          }
+        },
+        "without": {
+          "human_forced_choice": {
+            "accuracy": 0.71875,
+            "ci95": [
+              0.6640625,
+              0.7696289062499995
+            ],
+            "n": 128
+          },
+          "model": {
+            "accuracy": 0.7421875,
+            "ci95": [
+              0.6640625,
+              0.8203125
+            ],
+            "n": 128
+          }
+        }
+      },
+      "kappa_human_vs_model": 0.6348314606741573
+    }
+  },
+  "inter_annotator": {}
+}
