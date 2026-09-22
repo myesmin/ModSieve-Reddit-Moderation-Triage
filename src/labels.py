@@ -1,17 +1,17 @@
-"""Delayed moderation labels.
+"""Moderation labels, collected 48 hours after a post was first seen.
 
-Reddit hides removed posts from its listings, so a removal can only be observed
-by recording a post while it is live (src/collect.py) and looking it up again
-by id once moderators have had time to act. This module is the second half.
+Reddit hides removed posts from listings, so the only way to see a removal is to
+save the post while it's live (src/collect.py) and look it up again by id later.
+This module does the lookup.
 
-Two things make the label trustworthy:
+Two details matter for the labels to be usable:
 
-* **Removal is not deletion.** A moderator removing a post is a moderation
-  decision; an author deleting their own post is not. They get different
-  outcomes, and only the former is a positive label.
-* **Only posts seen young are unbiased.** A post first recorded at five days
-  old had already survived five days of moderation. `hours_old_at_snapshot`
-  travels with every label so analysis can keep only posts caught early.
+* Removal and deletion are different. A moderator removing a post is a
+  moderation decision; an author deleting their own post isn't. Only removals
+  count as positive labels.
+* Only posts first seen while young give an unbiased rate. A post first saved at
+  five days old has already survived five days of moderation, so
+  `hours_old_at_snapshot` is stored with each label to filter on.
 """
 from __future__ import annotations
 

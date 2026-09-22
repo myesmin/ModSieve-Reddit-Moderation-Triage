@@ -1,24 +1,21 @@
-"""Raw collected posts -> a clean, leakage-checked, split dataset.
+"""Turns raw collected posts into a cleaned, split dataset.
 
-Every removal is counted and written to a report, because a cleaning step that
-silently drops rows is indistinguishable from a bug. The three things this
-stage guards against, in order of how badly they would mislead us:
+Each step counts how many rows it removes and writes that to a report, so nothing
+gets dropped silently. It deals with three kinds of leakage:
 
-1. **Label leakage.** Comments carry the community's own fingerprints --
-   AutoModerator stickies ("Welcome to r/harrypotter!"), moderator notices,
-   users writing "crossposting from r/marvel". A model will happily learn
-   those instead of the content, and coverage will rise for the wrong reason.
-2. **Contradictory duplicates.** A post crossposted to two communities appears
-   twice with two different labels. Kept, it is label noise; split across
-   train and test, it is test-set contamination.
-3. **Temporal leakage.** A random split trains on posts written after the ones
-   it is tested on. Deployment only ever sees the future, so the test set is
-   the most recent slice of each community.
+1. Label leakage. Posts and comments often name their community: AutoModerator
+   stickies ("Welcome to r/harrypotter!"), mod notices, "crossposting from
+   r/marvel". A model would learn those instead of the content.
+2. Conflicting duplicates. A post crossposted to two communities shows up twice
+   with different labels. Left in, it's label noise, and if the copies land in
+   train and test it contaminates the test set.
+3. Temporal leakage. A random split would train on posts newer than the test
+   posts. The test set is the most recent slice of each community instead.
 
-It also enforces a **data contract**: the output carries only what exists at
-the moment a post is submitted, because that is the moment the triage system
-has to decide. Score, comment count and upvote ratio are measured afterwards,
-and comments have not been written yet. Those never become features.
+It also applies the data contract: only fields that exist at submission time
+are kept, since that's when the triage decision happens. Score, comment count
+and upvote ratio come later, and comments don't exist yet, so none of them are
+used as features.
 """
 from __future__ import annotations
 
@@ -160,8 +157,8 @@ def deduplicate(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     key = df["title"].map(title_key)
     labels_per_key = df.groupby(key)["subreddit"].nunique()
 
-    # Same title under more than one community: the label is genuinely
-    # ambiguous, so every copy goes -- keeping one would pick a winner at random.
+    # Same title in more than one community means the label is ambiguous, so
+    # drop every copy rather than picking one at random.
     conflicting = key.map(labels_per_key) > 1
     df, key = df[~conflicting], key[~conflicting]
 

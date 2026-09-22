@@ -1,14 +1,11 @@
-"""A human baseline: what does a person score on the posts the model is scored on?
+"""Human baseline: how well does a person do on the posts the model is scored on?
 
-The model's 0.822 has no ceiling to be measured against until a person labels
-the same posts under the same conditions. Annotators see the post text only --
-no community, score, flair or author -- on a random, class-balanced sample, and
-are compared with the model's *out-of-fold* predictions on exactly those posts,
-so neither side has seen the answer.
+Annotators see only the post text (no community, score, flair or author) for a
+class-balanced random sample. Their answers are compared with the model's
+out-of-fold predictions on the same posts, so neither has seen the labels.
 
-"Unsure" is a legitimate answer. It is what a moderator does when they escalate,
-and it lines up with the model's own abstention below a confidence threshold:
-the fair comparison is the model abstaining on the same fraction of posts.
+Annotators can answer "unsure". That's the human version of escalating, so it
+is compared with the model skipping the same number of its least confident posts.
 """
 from __future__ import annotations
 
@@ -112,8 +109,8 @@ def score_annotator(answers: pd.DataFrame, corpus: pd.DataFrame,
 def agreement(answers: pd.DataFrame) -> dict:
     """Pairwise Cohen's kappa between annotators, "unsure" counted as a label.
 
-    Low agreement between people means the task itself is ambiguous, and no
-    model should be expected to exceed it.
+    If people don't agree with each other, the task is ambiguous and the model
+    can't be expected to do better than they do.
     """
     wide = answers.pivot(index="id", columns="annotator", values="answer")
     pairs = {}

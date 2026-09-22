@@ -19,7 +19,7 @@ def test_corpus_is_balanced_and_complete(corpus):
 
 
 def test_corpus_is_title_only_in_practice(corpus):
-    """The finding the whole project rests on -- guard it against silent change."""
+    """Main finding of the project; this fails if it changes."""
     empty = (corpus["content"].fillna("").str.strip() == "").mean()
     assert empty > 0.95, f"bodies are no longer mostly empty ({empty:.1%})"
 

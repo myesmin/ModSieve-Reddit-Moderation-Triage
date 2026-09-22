@@ -1,4 +1,4 @@
-"""Every headline number in the README is produced here, not asserted."""
+"""Generates all the metrics used in the README (reports/metrics.json)."""
 from __future__ import annotations
 
 import json

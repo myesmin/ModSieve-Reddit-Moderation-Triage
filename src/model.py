@@ -1,4 +1,4 @@
-"""The production pipeline, and the baselines it has to beat."""
+"""The model pipeline and the regex baseline."""
 from __future__ import annotations
 
 import re
@@ -34,7 +34,7 @@ _POTTER = re.compile(FRANCHISE_TOKENS["harrypotter"], re.I)
 
 
 def keyword_rule(text: pd.Series, fallback: str = "harrypotter") -> np.ndarray:
-    """A hand-written regex. Any model must beat this to justify its existence."""
+    """Hand-written regex baseline that the model should beat."""
     def classify(value: str) -> str:
         is_marvel = bool(_MARVEL.search(value))
         is_potter = bool(_POTTER.search(value))

@@ -1,19 +1,16 @@
-"""Scalable collection: many communities, with comment threads.
+"""Collects posts (and optionally comments) from several subreddits.
 
-The existing corpus is title-only (97.7% of bodies are empty), which is the
-measured reason coverage stalls. Comments are the fix: they carry 10-100x the
-text per post. Collecting them means tens of thousands of API calls, so this
-module is built for runs that are long enough to fail partway through:
+The original dataset is almost all titles (97.7% of bodies are empty), and that
+is what limits coverage. Comments add a lot more text per post, but fetching them
+takes one API call per post, so runs are long and can fail partway. Because of
+that the collector:
 
-* **resumable** - every post id that has been written is checkpointed, so a
-  re-run skips work instead of duplicating it
-* **rate limited** - requests are paced rather than fired as fast as the
-  network allows
-* **incremental** - batches are flushed to disk as they fill, so memory stays
-  flat whether the target is 2,000 posts or 200,000
+* checkpoints every post id it writes, so re-running skips finished posts
+* paces requests to stay under the rate limit
+* writes batches to disk as it goes, so memory use doesn't grow with run size
 
-The Reddit client is injected rather than imported, so the collection logic is
-testable without network access or credentials.
+The Reddit client is passed in, so the logic can be tested without network
+access or credentials.
 """
 from __future__ import annotations
 

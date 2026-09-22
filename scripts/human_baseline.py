@@ -1,11 +1,11 @@
-"""Label a blind sample of posts by hand, then score people against the model.
+"""Label the human baseline sample by hand, then score it against the model.
 
-    python scripts/human_baseline.py label --annotator mohona   # resumable
-    python scripts/human_baseline.py score                      # writes the report
+    python scripts/human_baseline.py label --annotator mohona   # can stop and resume
+    python scripts/human_baseline.py score                      # writes results.json
 
-Every annotator labels the same sample, so their answers can be compared with
-each other as well as with the model. Label before looking at the model's
-predictions, and without looking posts up.
+Everyone labels the same sample, so annotators can be compared with each other
+as well as with the model. Label before looking at the model's predictions, and
+don't look posts up.
 """
 from __future__ import annotations
 

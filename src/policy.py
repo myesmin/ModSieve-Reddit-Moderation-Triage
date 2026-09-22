@@ -1,13 +1,11 @@
-"""The decision layer.
+"""Decision layer: turns model probabilities into actions.
 
-A model emits a probability. A *system* has to decide what to do with it.
-This module is that gap: it turns scores into one of two actions -- decide
-automatically, or escalate to a human -- and reports the only number the
-project is really optimising:
+Each post is either handled automatically or escalated to a human, based on a
+confidence threshold. The main number reported here is coverage at a fixed
+precision floor:
 
-    coverage at a fixed precision floor
-      = what fraction of the queue can we resolve without human review,
-        while staying at or above the precision we promised?
+    coverage = fraction of posts handled without human review,
+               while precision stays at or above the chosen floor
 """
 from __future__ import annotations
 
@@ -67,10 +65,10 @@ def sweep(y_true, proba, classes, floor: float, grid=None) -> list[OperatingPoin
 
 
 def best_operating_point(y_true, proba, classes, floor: float) -> OperatingPoint | None:
-    """Lowest threshold meeting the precision floor -- i.e. maximum coverage.
+    """Lowest threshold that meets the precision floor, i.e. maximum coverage.
 
     Returns None when no threshold reaches the floor, which is a real and
-    reportable outcome, not an error.
+    reportable result, not an error.
     """
     viable = [p for p in sweep(y_true, proba, classes, floor) if p.meets_floor]
     return max(viable, key=lambda p: p.coverage) if viable else None

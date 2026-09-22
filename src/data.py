@@ -11,7 +11,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "Data"
 SUBREDDITS = {"harrypotter.csv": "harrypotter", "marvel.csv": "marvel"}
 
 # Tokens that name a franchise outright. Used only for the keyword baseline and
-# the ablation -- never as model features.
+# the ablation, not as model features.
 FRANCHISE_TOKENS = {
     "marvel": r"marvel|avenger|thanos|mcu|spider|iron ?man|deadpool|stan lee|"
               r"captain america|thor|loki|hulk|wanda|x-?men",
