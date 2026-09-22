@@ -303,6 +303,10 @@ class PrawSource:
                 continue
             yield self._to_post(submission, subreddit, comments_per_post)
 
+    def lookup(self, ids: list[str]):
+        """Current state of posts by id, including ones hidden from listings."""
+        return self._reddit.info(fullnames=[f"t3_{i}" for i in ids])
+
     def _listing_iter(self, sub):
         if self._listing == "new":
             yield from sub.new(limit=None)

@@ -13,6 +13,8 @@
 Data/raw/
 Data/processed/
 Data/probe/
+Data/labels/
+Data/.hourly.lock/
 
 # --- Model artifacts and experiment tracking ----------------------------------
 # Trained models are rebuilt from code + a data hash, never committed as binaries.
@@ -53,3 +55,4 @@ Thumbs.db
 # --- Run output ---------------------------------------------------------------
 *.log
 nohup.out
+logs/

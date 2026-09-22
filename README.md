@@ -144,14 +144,19 @@ src/
   data.py       corpus loading, franchise-token utilities
   model.py      the pipeline, and the regex baseline it must beat
   policy.py     the decision layer: thresholds, coverage/precision, base-rate maths
-  collect.py    resumable, rate-limited, multi-community collection with comments
-  prepare.py    leakage removal, deduplication, temporal split, removal report
+  collect.py    resumable, rate-limited, multi-community collection
+  prepare.py    leakage removal, deduplication, temporal split, data contract
+  labels.py     delayed moderation labels: re-check posts 48h later by id
   evaluate.py   produces every number in this README
 scripts/
   collect.py       CLI for collection
   prepare.py       CLI for preparation
+  label.py         CLI for labelling; --stats for the current removal rate
+  hourly.sh        one scheduled cycle: snapshot, then label what is due
+  schedule.sh      install / status / uninstall the hourly job (macOS launchd)
+  probe_removals.py  the feasibility probe that motivated the labelling design
   make_figures.py
-tests/            63 tests: collector resume, leakage stripping, split integrity,
+tests/            78 tests: collector resume, leakage stripping, split integrity,
                   policy maths, and one collect -> prepare end-to-end run
 Code/             exploratory notebooks (collection, EDA, modeling)
 Data/             collected posts, 1,000 per community
@@ -167,7 +172,7 @@ pip install -r requirements.txt
 cp .env.example .env          # only needed to collect fresh data
 python -m src.evaluate        # writes reports/metrics.json
 python scripts/make_figures.py
-pytest                        # 63 tests
+pytest                        # 78 tests
 ```
 
 To build a larger corpus — collect (interrupt and re-run freely; completed posts
@@ -184,12 +189,15 @@ Every number in this README comes from `reports/metrics.json`. None are typed by
 
 The classifier works. The system around it is the actual project.
 
-- **Data collection (in progress).** A daily pass over the newest posts in eight
-  communities, under the submission-time data contract. Next is **real moderation
-  labels**: Reddit hides removed posts from listings, so a removal can only be
-  seen by recording a post while it is live and looking it up again later. That
-  turns the question from "which community is this?" into "will moderators remove
-  this?" — genuine ground truth, with the delayed labels production systems deal in.
+- **Moderation labels (collecting).** Reddit hides removed posts from listings, so
+  a removal can only be observed by recording a post while it is live and looking
+  it up again by id later. An hourly job snapshots new posts; 48 hours on, each is
+  re-checked and labelled *kept*, *removed by moderation*, or *deleted by author* —
+  deletion is the author's choice, not a moderation decision, and is never counted
+  as a removal. Only posts first seen under two hours old enter the removal rate:
+  a post first seen at five days old has already survived five days of moderation.
+  A two-hour probe of 75 young posts found 1 moderator removal (~1.3%), consistent
+  with the ~1% base rate assumed in the flag-precision analysis above.
 - **M1 — serving and policy.** A `/classify` endpoint returning label, confidence, the
   features that drove the call, and model version; thresholds in config, not code;
   tests and a container.
